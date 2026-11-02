@@ -69,7 +69,10 @@ running it.
 - Open every PR as a draft. Before it leaves draft, list every acceptance criterion in
   the PR body, word for word, with its proof: a test name, a `file:line`, a CI run, or
   "Needs Dan's device" with what I should do.
-- When the PR leaves draft, move the issue to In Review and comment the PR link.
+- When the PR leaves draft, move the issue to In Review and comment the PR link. Hopper,
+  the review bot, starts on that move.
+- After pushing fixes for a review, move the issue to In Progress and back to In Review,
+  so Hopper reviews again. Do this for every issue the PR covers.
 - I merge, with squash. Merging marks the issue Done.
 
 ## Secrets and privacy
