@@ -1,0 +1,10 @@
+{
+  "extraKnownMarketplaces": {
+    "dstack": {
+      "source": { "source": "github", "repo": "dsickles/dstack" }
+    }
+  },
+  "enabledPlugins": {
+    "dstack@dstack": true
+  }
+}

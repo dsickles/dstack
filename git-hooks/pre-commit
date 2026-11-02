@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Global pre-commit (git config --global core.hooksPath <dstack>/git-hooks).
+# Runs dstack's secret scan, then the repo's own pre-commit hook if it has one.
+set -euo pipefail
+dstack="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+bash "$dstack/scripts/secret-scan.sh"
+exec bash "$dstack/git-hooks/chain.sh" pre-commit "$@"

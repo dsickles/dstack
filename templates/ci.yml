@@ -1,0 +1,21 @@
+# .github/workflows/ci.yml for a DASSoft repo. Replace the check step's setup and command.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    uses: dsickles/dstack/.github/workflows/guard.yml@main
+
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # <language setup, e.g. actions/setup-node or astral-sh/setup-uv>
+      - run: <check command>
