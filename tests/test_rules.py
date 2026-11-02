@@ -22,7 +22,6 @@ class CommitMessage(unittest.TestCase):
             "Merge pull request #10 from dsickles/foo",
             "Merge branch 'main' into feature",
             'Revert "feat: add menu"',
-            "fixup! feat: add menu",
             "# a comment line\nfeat: add menu",
         ]:
             with self.subTest(msg=msg):
@@ -37,6 +36,9 @@ class CommitMessage(unittest.TestCase):
             "feature: unknown type",
             "",
             "# only a comment",
+            "fixup! feat: add menu",
+            "squash! feat: add menu",
+            "amend! feat: add menu",
         ]:
             with self.subTest(msg=msg):
                 self.assertFalse(rules.commit_msg_ok(msg))
@@ -76,6 +78,12 @@ class ApprovalGate(unittest.TestCase):
             "mcp__mail__reply_to_thread",
             "mcp__mail__forward_email",
             "mcp__messages__send_text",
+            "mcp__google-calendar__create_events",
+            "mcp__google-calendar__update_events",
+            "mcp__gmail__SendEmail",
+            "mcp__gmail__sendEmail",
+            "mcp__slack__postMessage",
+            "mcp__slack__chat_postMessage",
         ]:
             with self.subTest(tool=tool):
                 self.assertEqual(rules.gate_decision(tool), "ask")
@@ -102,10 +110,18 @@ class Autonomy(unittest.TestCase):
         self.assertIsNone(rules.parse_autonomy("no level here"))
         self.assertIsNone(rules.parse_autonomy(None))
 
+    def test_only_whole_levels_on_the_declaration_line(self):
+        self.assertIsNone(rules.parse_autonomy("Autonomy level: 30"))
+        self.assertIsNone(rules.parse_autonomy("Autonomy level: 4"))
+        self.assertEqual(rules.parse_autonomy("# Note: Autonomy level: 3\n**Autonomy level:** 1 Shape\n"), 1)
+        self.assertIsNone(rules.parse_autonomy("We may reach Autonomy level: 3 later"))
+        self.assertEqual(rules.parse_autonomy("Autonomy level: 3\nAutonomy level: 1\n"), 1)
+
 
 class MergeGuard(unittest.TestCase):
-    def bash(self, cmd, branch="feature", autonomy=2):
-        return rules.merge_guard_decision("Bash", {"command": cmd}, autonomy, branch)
+    def bash(self, cmd, branch="feature", autonomy=2, upstream=None, push_default=None):
+        return rules.merge_guard_decision("Bash", {"command": cmd}, autonomy, branch,
+                                          upstream, push_default)
 
     def test_denies_merges_and_main_pushes(self):
         for cmd in [
@@ -116,6 +132,15 @@ class MergeGuard(unittest.TestCase):
             "git push origin master",
             "git push --force origin +main",
             "npm test; git push origin main",
+            "git push origin --all",
+            "git push --mirror origin",
+            "git status\ngh pr merge 1 --squash",
+            "FOO=1 gh pr merge 1",
+            "command gh pr merge 1",
+            "bash -c 'gh pr merge 1'",
+            "gh.exe pr merge 1",
+            "GH pr merge 1",
+            "gh api --method PUT repos/o/r/pulls/1/merge",
         ]:
             with self.subTest(cmd=cmd):
                 self.assertEqual(self.bash(cmd), "deny")
@@ -123,6 +148,18 @@ class MergeGuard(unittest.TestCase):
     def test_denies_bare_push_on_main(self):
         self.assertEqual(self.bash("git push", branch="main"), "deny")
         self.assertEqual(self.bash("git push origin", branch="master"), "deny")
+
+    def test_head_means_the_current_branch(self):
+        self.assertEqual(self.bash("git push origin HEAD", branch="main"), "deny")
+        self.assertEqual(self.bash("git push origin @", branch="main"), "deny")
+        self.assertIsNone(self.bash("git push -u origin HEAD", branch="feature"))
+
+    def test_bare_push_follows_upstream_and_push_default(self):
+        self.assertEqual(self.bash("git -c push.default=upstream push", upstream="main"), "deny")
+        self.assertEqual(self.bash("git push", upstream="main"), "deny")
+        self.assertEqual(self.bash("git -c push.default=matching push"), "deny")
+        self.assertEqual(self.bash("git push", push_default="matching"), "deny")
+        self.assertIsNone(self.bash("git push", upstream="feature", push_default="simple"))
 
     def test_allows_branch_work(self):
         for cmd in [
@@ -147,6 +184,10 @@ class MergeGuard(unittest.TestCase):
 
     def test_unknown_level_is_guarded(self):
         self.assertEqual(self.bash("gh pr merge 3", autonomy=None), "deny")
+
+    def test_non_string_command_raises(self):
+        with self.assertRaises(TypeError):
+            rules.merge_guard_decision("Bash", {"command": ["gh", "pr", "merge"]}, 1, "feature")
 
 
 if __name__ == "__main__":

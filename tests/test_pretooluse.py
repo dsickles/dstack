@@ -46,9 +46,27 @@ class PreToolUse(unittest.TestCase):
             with self.subTest(p=p):
                 self.assertIsNone(run(p, self.project))
 
-    def test_bad_input_is_ignored(self):
-        r = subprocess.run([sys.executable, str(HOOK)], input="not json", capture_output=True, text=True)
-        self.assertEqual((r.returncode, r.stdout), (0, ""))
+    def test_bad_input_is_denied(self):
+        for raw in ["not json", "[]", json.dumps({"tool_name": "Bash", "tool_input": {"command": 5}})]:
+            with self.subTest(raw=raw):
+                r = subprocess.run([sys.executable, str(HOOK)], input=raw, capture_output=True,
+                                   text=True, env=dict(os.environ, CLAUDE_PROJECT_DIR=str(self.project)))
+                self.assertEqual(r.returncode, 0)
+                self.assertEqual(json.loads(r.stdout)["hookSpecificOutput"]["permissionDecision"], "deny")
+
+    def test_unreadable_agents_md_is_denied(self):
+        (self.project / "AGENTS.md").mkdir()
+        p = {"tool_name": "Bash", "tool_input": {"command": "gh pr merge 4"}, "cwd": str(self.project)}
+        self.assertEqual(run(p, self.project), "deny")
+
+    def test_bare_push_tracking_main_is_denied(self):
+        git = ["git", "-C", str(self.project)]
+        subprocess.run([*git, "init", "-q", "-b", "feature"], check=True)
+        subprocess.run([*git, "config", "branch.feature.remote", "origin"], check=True)
+        subprocess.run([*git, "config", "branch.feature.merge", "refs/heads/main"], check=True)
+        (self.project / "AGENTS.md").write_text("**Autonomy level:** 2 Build\n")
+        p = {"tool_name": "Bash", "tool_input": {"command": "git push"}, "cwd": str(self.project)}
+        self.assertEqual(run(p, self.project), "deny")
 
 
 if __name__ == "__main__":

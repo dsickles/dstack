@@ -1,7 +1,8 @@
 """Claude PreToolUse hook: the message approval gate and the merge guard.
 
 Reads the hook payload on stdin. Prints a decision only when one applies; otherwise
-exits silently so Claude's normal permission rules decide.
+exits silently so Claude's normal permission rules decide. If the payload can't be read
+or anything fails, it denies: a crashed hook would otherwise let the tool run.
 """
 
 import json
@@ -21,16 +22,23 @@ def _decision(kind, reason):
                                    "permissionDecisionReason": reason}}
 
 
+def _git(args, cwd):
+    try:
+        return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True,
+                              timeout=5).stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
 def _repo_state(cwd):
     project = Path(os.environ.get("CLAUDE_PROJECT_DIR") or cwd or os.getcwd())
     agents = project / "AGENTS.md"
     autonomy = rules.parse_autonomy(agents.read_text(encoding="utf-8")) if agents.exists() else None
-    try:
-        branch = subprocess.run(["git", "branch", "--show-current"], cwd=cwd or project,
-                                capture_output=True, text=True, timeout=5).stdout.strip()
-    except (OSError, subprocess.TimeoutExpired):
-        branch = ""
-    return autonomy, branch
+    where = cwd or project
+    branch = _git(["branch", "--show-current"], where)
+    upstream = _git(["config", f"branch.{branch}.merge"], where).removeprefix("refs/heads/") if branch else ""
+    push_default = _git(["config", "push.default"], where)
+    return autonomy, branch, upstream, push_default
 
 
 def decide(payload):
@@ -38,8 +46,8 @@ def decide(payload):
     tool_input = payload.get("tool_input") or {}
 
     if tool == "Bash" or (tool.startswith("mcp__") and "merge" in tool.rpartition("__")[2].lower()):
-        autonomy, branch = _repo_state(payload.get("cwd"))
-        if rules.merge_guard_decision(tool, tool_input, autonomy, branch) == "deny":
+        autonomy, branch, upstream, push_default = _repo_state(payload.get("cwd"))
+        if rules.merge_guard_decision(tool, tool_input, autonomy, branch, upstream, push_default) == "deny":
             return _decision("deny", "dstack merge guard: Dan merges, and agents never push to main "
                                      "below autonomy level 3. Push a branch and open a PR instead.")
 
@@ -51,10 +59,10 @@ def decide(payload):
 
 def main() -> int:
     try:
-        payload = json.load(sys.stdin)
-    except ValueError:
-        return 0
-    result = decide(payload)
+        result = decide(json.load(sys.stdin))
+    except Exception as e:  # fail closed
+        result = _decision("deny", f"dstack hook could not check this call ({type(e).__name__}). "
+                                   "Ask Dan, or fix the hook.")
     if result:
         print(json.dumps(result))
     return 0

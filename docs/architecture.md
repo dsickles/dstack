@@ -31,7 +31,8 @@ and as a source of templates that `/kickoff` copies into other repos.
    - `PreToolUse` (`pretooluse.py`): the merge guard denies `gh pr merge`, MCP merge tools
      and pushes to main/master unless the project's AGENTS.md says autonomy level 3; the
      approval gate asks before MCP tools whose names send, reply, forward, invite or create
-     calendar events. Linear and GitHub tools pass.
+     calendar events. Linear and GitHub tools pass. If the hook can't read a call or
+     crashes, it denies.
 
 ## How a repo gets dstack
 
@@ -43,6 +44,8 @@ sessions too, where `~/.claude` does not exist.
 
 - The approval gate matches tool names, so a messaging tool with an unusual verb slips
   through, and browser clicks that send messages are not covered.
+- The merge guard reads the command text. A push hidden inside `bash -c '...'` or a
+  script file is not seen; CI and Dan's merge are the backstop.
 - Local git hooks don't run in cloud sessions; CI is the backstop there.
 - The cloud signal `CLAUDE_CODE_REMOTE` and private-repo plugin install in cloud sessions
   are to be confirmed on first use.
