@@ -71,8 +71,10 @@ running it.
   "Needs Dan's device" with what I should do.
 - When the PR leaves draft, move the issue to In Review and comment the PR link. Hopper,
   the review bot, starts on that move.
-- After pushing fixes for a review, move the issue to In Progress and back to In Review,
-  so Hopper reviews again. Do this for every issue the PR covers.
+- Review rounds, for every issue the PR covers: move it to In Progress when you start
+  on the review's changes. When the fixes are pushed and CI is green, move it back to
+  In Review and comment on the PR which fix answers which item. Hopper starts again on
+  that move.
 - I merge, with squash. Merging marks the issue Done.
 
 ## Secrets and privacy

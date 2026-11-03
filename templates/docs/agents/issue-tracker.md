@@ -33,7 +33,8 @@ State its title before starting.
 ## Working a ticket
 
 - Branch from the issue's Linear branch name.
-- **In Progress** when you start; **In Review** when the PR leaves draft (see
+- **In Progress** when you start; **In Review** when the PR leaves draft; back to
+  **In Progress** while you fix review changes, then **In Review** again (see
   pull-requests.md). Dan's merge moves it to **Done**.
 - New ideas found mid-build become new issues in the right project.
 

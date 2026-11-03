@@ -17,6 +17,8 @@ Every PR follows these steps. CI's guard checks the title and scans for secrets.
    what you find. Run `check`.
 6. **Ready.** Mark the PR ready, move the issue to **In Review**, and comment the PR link
    on the issue.
-7. **Review rounds.** After each round of fixes, move the issue to In Progress and back to
-   In Review.
+7. **Review rounds.** For every issue the PR covers: move it to **In Progress** when you
+   start on the review's changes. When the fixes are pushed and CI is green, move it back
+   to **In Review** and comment on the PR which fix answers which item. Hopper, the
+   review bot, starts again on that move.
 8. **Merge** is Dan's. Squash-merge; the issue moves to Done.
