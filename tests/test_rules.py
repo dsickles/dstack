@@ -185,6 +185,70 @@ class MergeGuard(unittest.TestCase):
     def test_unknown_level_is_guarded(self):
         self.assertEqual(self.bash("gh pr merge 3", autonomy=None), "deny")
 
+    # Hopper round 3 blockers. tests/test_push_probes.py checks the pushes against real git.
+    def test_glob_and_matching_refspecs_are_denied(self):
+        for cmd in ["git push origin refs/heads/*", "git push origin refs/heads/*:refs/heads/*",
+                    "git push origin +refs/heads/*", "git push origin 'refs/heads/*'",
+                    "git push origin :", "git push origin +:"]:
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.bash(cmd), "deny")
+
+    def test_git_found_after_assignments_wrappers_and_paths(self):
+        for cmd in ["FOO=1 git push origin main", "command git push origin main",
+                    "env git push origin main", "env FOO=1 git push origin main",
+                    "/usr/bin/git push origin main", "sudo git push origin main",
+                    "sudo -u dan git push origin main", "exec git push origin main",
+                    "nohup git push origin main", "time git push origin main",
+                    "git.exe push origin main", "Git push origin main", "GIT.EXE push origin main",
+                    r'"C:\Program Files\Git\bin\git.exe" push origin main',
+                    "(git push origin main)", "git status & git push origin main",
+                    "git -C . push origin main", "git --no-pager push origin main"]:
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.bash(cmd), "deny")
+
+    def test_last_push_default_wins_and_key_is_case_insensitive(self):
+        # No saved upstream, or the upstream-is-main check would hide the bug.
+        for cmd in ["git -c push.default=simple -c push.default=matching push",
+                    "git -c push.Default=matching push", "git -c PUSH.DEFAULT=matching push",
+                    "git --config-env=push.default=PD push"]:
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.bash(cmd, upstream=None, push_default=None), "deny")
+        self.assertIsNone(self.bash("git -c push.default=matching -c push.default=simple push"))
+        self.assertEqual(self.bash("git -c push.default=simple push", push_default="matching"),
+                         None)
+
+    def test_upstream_set_on_the_command_line(self):
+        cmd = ("git -c branch.feature.remote=origin -c branch.feature.merge=refs/heads/main "
+               "-c push.default=upstream push")
+        self.assertEqual(self.bash(cmd), "deny")
+        self.assertEqual(self.bash("git -c Branch.feature.Merge=refs/heads/main push"), "deny")
+        # The branch name is case-sensitive: this sets another branch's upstream.
+        self.assertIsNone(self.bash("git -c branch.Feature.merge=refs/heads/main push"))
+        self.assertIsNone(self.bash("git -c branch.feature.merge=refs/heads/feature push"))
+        self.assertEqual(self.bash("git -c remote.origin.push=HEAD:main push origin"), "deny")
+
+    def test_quoted_gh_pr_merge(self):
+        for cmd in ['gh pr "merge" 1', "gh pr 'merge' 1", 'gh "pr" merge 1', "'gh' pr merge 1",
+                    "FOO=1 /usr/local/bin/gh pr 'merge' 1", 'gh "api" -X PUT repos/o/r/pulls/1/merge']:
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.bash(cmd), "deny")
+
+    def test_earlier_parts_of_the_command_count(self):
+        for cmd in ["git config push.default matching && git push",
+                    "git config set push.default matching; git push",
+                    "git config branch.feature.merge refs/heads/main && git push",
+                    "git checkout main && git push", "git switch main && git push origin HEAD",
+                    "git checkout -b fresh origin/main && git push",
+                    "cd ../other && git push", "GIT_CONFIG_PARAMETERS=x git push"]:
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.bash(cmd), "deny")
+        for cmd in ["git config --get push.default && git push",
+                    "git checkout -- README.md && git push",
+                    "git checkout -b fresh && git push -u origin fresh",
+                    "cd sub && git push origin feature"]:
+            with self.subTest(cmd=cmd):
+                self.assertIsNone(self.bash(cmd))
+
     def test_non_string_command_raises(self):
         with self.assertRaises(TypeError):
             rules.merge_guard_decision("Bash", {"command": ["gh", "pr", "merge"]}, 1, "feature")
