@@ -293,6 +293,24 @@ class MergeGuard(unittest.TestCase):
         self.assertIsNone(decide("git p"))
         self.assertIsNone(self.bash("git -c alias.push='push origin main' push origin feature"))
 
+    # Hopper round 5. tests/test_push_probes.py runs each one against real git.
+    def test_round_five(self):
+        for cmd in ["env -i -C ../x git push origin HEAD", "if cd ../x; then git push; fi",
+                    "GIT_DIR=../x/.git git push origin @", "git checkout --orphan=main && git push",
+                    "git -c remote.origin.mirror=yes push origin",
+                    "GIT_CONFIG_COUNT=1 git ship", "git -c include.path=/x ship",
+                    "git http-push https://x/r.git main", "git send-pack ../o.git",
+                    "git send-pack --all ../o.git"]:
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.bash(cmd), "deny")
+        self.assertEqual(rules.merge_guard_decision("Bash", {"command": "git push origin"}, 2,
+                                                    "feature", mirror=True), "deny")
+        for cmd in ["git config --type bool core.x true && git push origin feature",
+                    "GIT_DIR=../x/.git git log", "env FOO=1 git push origin feature",
+                    "git symbolic-ref HEAD refs/heads/fix && git push origin HEAD"]:
+            with self.subTest(cmd=cmd):
+                self.assertIsNone(self.bash(cmd))
+
     def test_non_string_command_raises(self):
         with self.assertRaises(TypeError):
             rules.merge_guard_decision("Bash", {"command": ["gh", "pr", "merge"]}, 1, "feature")

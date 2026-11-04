@@ -22,6 +22,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+PROTECTED_REFS = {"refs/heads/main", "refs/heads/master"}
 HOOK = Path(__file__).resolve().parent.parent / "hooks" / "pretooluse.py"
 GIT = shutil.which("git")
 BASH = shutil.which("bash")
@@ -78,6 +79,47 @@ UPDATES_MAIN = [
     # round 4: cd behind a wrapper
     ("", "command cd ../work2 && git push origin HEAD"),
     ("", "builtin cd ../work2 && git push origin HEAD"),
+    # round 5: env -C, { cd, GIT_DIR + HEAD
+    ("", "env -C ../work2 git push origin HEAD"),
+    ("", "env --chdir=../work2 git push origin HEAD"),
+    ("", "env -C ../work2 git push"),
+    ("", "{ cd ../work2 && git push origin HEAD; }"),
+    ("", "GIT_DIR=../work2/.git git push origin HEAD"),
+    ("", "GIT_DIR=../work2/.git GIT_WORK_TREE=../work2 git push origin HEAD"),
+    # round 5: symbolic-ref
+    ("", "git symbolic-ref HEAD refs/heads/main && git push origin HEAD"),
+    ("", "git symbolic-ref HEAD refs/heads/main && git push origin @"),
+    ("", "git symbolic-ref HEAD refs/heads/main && git push"),
+    # round 5: remote.<name>.mirror
+    ("", "git -c remote.origin.mirror=true push"),
+    ("", "git -c remote.origin.mirror=true push origin"),
+    ("", "git config remote.origin.mirror true && git push origin"),
+    ("git config remote.origin.mirror true", "git push origin"),
+    # round 5: git config -f / --file
+    ("", "git config -f .git/config push.default matching && git push"),
+    ("", "git config --file .git/config push.default matching && git push"),
+    ("", "git config -f .git/config --add remote.origin.push refs/heads/feature:refs/heads/main"
+         " && git push origin"),
+    # round 5: an alias that lives in unread config
+    ("", "printf '[alias]\\nship = push origin main\\n' > inc && git -c include.path=$PWD/inc ship"),
+    ("", "printf '[alias]\\nship = \"!git push origin main\"\\n' > inc &&"
+         " git -c include.path=$PWD/inc ship"),
+    ("", "printf '[alias]\\nship = push origin main\\n' > inc &&"
+         " git config include.path \"$PWD/inc\" && git ship"),
+    ("", "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.ship GIT_CONFIG_VALUE_0='push origin main'"
+         " git ship"),
+    # round 5: upstream given as a full ref
+    ("", "git branch -u refs/remotes/origin/main && git -c push.default=upstream push"),
+    ("", "git branch --set-upstream-to=refs/remotes/origin/main && git -c push.default=upstream push"),
+    # round 5: new-branch name stuck to the option (master is protected too)
+    ("", "git checkout -Bmain && git push origin HEAD"),
+    ("", "git checkout -Bmaster && git push origin HEAD"),
+    ("", "git switch -Cmain && git push origin HEAD"),
+    ("", "git switch -Cmaster && git push origin HEAD"),
+    ("", "git switch --create=master && git push origin HEAD"),
+    # round 5: send-pack skips the pre-push hook, so the probe also watches origin
+    ("", "git send-pack ../origin.git refs/heads/feature:refs/heads/main"),
+    ("", "git send-pack ../origin.git HEAD:refs/heads/main"),
 ]
 
 LEAVES_MAIN = [
@@ -90,6 +132,10 @@ LEAVES_MAIN = [
     ("", "git -c alias.p='push origin feature' p"),
     ("git config alias.p 'push -u origin HEAD'", "git p"),
     ("", "git -c alias.push='push origin main' push origin feature"),
+    ("", "git config -f .git/config push.default simple && git push origin feature"),
+    ("", "git branch -u refs/remotes/origin/feature && git push origin feature"),
+    ("", "git checkout -bfix && git push -u origin fix"),
+    ("", "git send-pack ../origin.git refs/heads/feature:refs/heads/feature"),
 ]
 
 
@@ -154,15 +200,22 @@ class PushProbes(unittest.TestCase):
         if setup:
             sh(setup, work)
         decision = guard(cmd, work)
+        before = self.origin_refs(root)
         sh(cmd, work, check=False)
         pushed = ""
         for repo in (work, root / "work2"):
             log = repo / ".git" / "pushed-refs"
             pushed += log.read_text() if log.exists() else ""
         # pre-push stdin: <local ref> <local sha> <remote ref> <remote sha>
-        updates = any(f.split()[2] == "refs/heads/main" and f.split()[1] != f.split()[3]
+        updates = any(f.split()[2] in PROTECTED_REFS and f.split()[1] != f.split()[3]
                       for f in pushed.splitlines() if len(f.split()) == 4)
-        return decision, updates
+        # plumbing such as send-pack skips pre-push, so also look at origin itself
+        return decision, updates or self.origin_refs(root) != before
+
+    @staticmethod
+    def origin_refs(root):
+        r = sh("git for-each-ref refs/heads/main refs/heads/master", root / "origin.git")
+        return r.stdout
 
     def test_pushes_that_update_main_are_denied(self):
         for n, (setup, cmd) in enumerate(UPDATES_MAIN):

@@ -83,7 +83,17 @@ PUSH_ALL = {"--all", "--mirror", "--branches"}
 GIT_ENV = re.compile(r"\bGIT_(CONFIG|DIR|WORK_TREE)")  # env vars that change git's config
 GIT_OPT_WITH_ARG = {"-c", "-C", "--git-dir", "--work-tree", "--namespace", "--config-env",
                     "--super-prefix"}
-NEW_BRANCH_OPTS = {"-b", "-B", "-c", "-C", "--orphan"}
+NEW_BRANCH_OPTS = {"-b", "-B", "-c", "-C", "--orphan", "--create", "--force-create"}
+CONFIG_OPTS_WITH_ARG = {"-f", "--file", "--blob", "--type", "--default", "--comment", "--value"}
+SHELL_WORDS = {"{", "}", "!", "if", "then", "else", "elif", "do", "while", "until"}
+# Subcommands the walker can trust when unread config (include.path, GIT_CONFIG*) is in
+# play. Any other name could be an alias defined in that config.
+BUILTINS = set("""add am apply bisect blame branch bundle cat-file checkout cherry-pick
+clean clone commit config describe diff fetch format-patch fsck gc grep help init log
+ls-files ls-remote merge mv notes pull push rebase reflog remote reset restore rev-list
+rev-parse revert rm send-pack shortlog show sparse-checkout stash status submodule switch
+symbolic-ref tag version worktree""".split())
+TRUE = {"true", "yes", "on", "1", UNKNOWN}
 WRAPPERS = {"command", "builtin", "env", "exec", "sudo", "nohup", "time", "xargs"}
 ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 NOT_ALIASABLE = {"push", "config", "checkout", "switch", "branch"}  # git ignores such aliases
@@ -162,7 +172,14 @@ def _config_write(args):
     if any(a.startswith(("--get", "--unset", "--list", "--remove", "--rename", "-l"))
            for a in args):
         return None
-    pos = [a for a in args if not a.startswith("-")]
+    pos, skip = [], False
+    for a in args:
+        if skip:
+            skip = False
+        elif a.startswith("-"):
+            skip = a in CONFIG_OPTS_WITH_ARG
+        else:
+            pos.append(a)
     if pos and pos[0] in ("set", "get", "unset", "list"):
         if pos[0] != "set":
             return None
@@ -175,6 +192,11 @@ def _checkout_target(args):
     for i, a in enumerate(args):
         if a in NEW_BRANCH_OPTS:
             return args[i + 1] if i + 1 < len(args) else UNKNOWN
+        name, eq, val = a.partition("=")
+        if eq and name in NEW_BRANCH_OPTS:  # --create=main
+            return val
+        if a[:2] in NEW_BRANCH_OPTS and len(a) > 2 and not a.startswith("--"):  # -Bmain
+            return a[2:]
         if a == "--":
             return None
         if a == "-" or a.startswith("@{"):  # the previous branch: can't tell which
@@ -182,6 +204,17 @@ def _checkout_target(args):
         if not a.startswith("-"):
             return a
     return None
+
+
+def _upstream_branch(up: str) -> str:
+    """origin/main, refs/remotes/origin/main and refs/heads/main all track main."""
+    if up == UNKNOWN:
+        return up
+    if up.startswith("refs/remotes/"):
+        return up.removeprefix("refs/remotes/").split("/", 1)[-1]
+    if up.startswith("refs/heads/"):
+        return up.removeprefix("refs/heads/")
+    return up.split("/", 1)[-1]
 
 
 def _branch_cmd(args, st):
@@ -198,7 +231,7 @@ def _branch_cmd(args, st):
     if up is not None:
         others = [p for p in pos if p != up]
         if not others or others[0] == st["branch"]:
-            st["upstream"] = UNKNOWN if up == UNKNOWN else up.split("/", 1)[-1]
+            st["upstream"] = _upstream_branch(up)
     elif {"-m", "-M", "--move"} & set(args):
         if len(pos) == 1 or (len(pos) == 2 and pos[0] in (st["branch"], UNKNOWN)):
             st["branch"] = pos[-1]
@@ -238,15 +271,31 @@ def _gh_merges(words) -> bool:
 
 def _first_command(words) -> str:
     for w in words:
-        if not (ASSIGNMENT.match(w) or _prog(w) in WRAPPERS or w.startswith("-")):
+        if not (ASSIGNMENT.match(w) or _prog(w) in WRAPPERS or w.startswith("-")
+                or w in SHELL_WORDS):
             return _prog(w)
     return ""
+
+
+def _changes_dir(words) -> bool:
+    """cd/pushd (behind any wrapper or `{`), or `env -C dir` / `env --chdir=dir`."""
+    if _first_command(words) in ("cd", "pushd"):
+        return True
+    for j, w in enumerate(words):
+        if _prog(w) == "env":
+            for a in words[j + 1:]:
+                if a.startswith(("-C", "--chdir")):
+                    return True
+                if not (a.startswith("-") or ASSIGNMENT.match(a)):
+                    break
+    return False
 
 
 def _git(words, j, st, depth) -> bool:
     """Check one git call; update the tracked state for calls that change it."""
     sub, cli, args, at, elsewhere = _git_call(words, j)
     cfg = _merge(st["config"], cli)
+    opaque = st["opaque"] or any(k.startswith(INCLUDE) for k in cfg)  # config we can't read
     alias = None if sub in NOT_ALIASABLE else cfg.get(f"alias.{sub.lower()}",
                                                           st["aliases"].get(sub.lower()))
     if alias:
@@ -256,6 +305,8 @@ def _git(words, j, st, depth) -> bool:
         if alias.startswith("!"):  # a shell alias runs as its own command
             return _walk(alias[1:] + rest, st, depth + 1)
         return _walk(shlex.join(words[j:at]) + " " + alias + rest, st, depth + 1)
+    if opaque and sub and sub not in BUILTINS:  # may be an alias in that config
+        return True
     if sub == "config" and (kv := _config_write(args)):
         _set(st["config"], *kv)
     elif sub in ("checkout", "switch"):
@@ -264,14 +315,28 @@ def _git(words, j, st, depth) -> bool:
             st["branch"], st["upstream"] = target, UNKNOWN
     elif sub == "branch":
         _branch_cmd(args, st)
+    elif sub == "symbolic-ref":  # `git symbolic-ref HEAD refs/heads/main` is a checkout
+        pos = [a for a in args if not a.startswith("-")]
+        if len(pos) >= 2 and pos[0] == "HEAD":
+            ref = pos[1]
+            st["branch"] = ref.removeprefix("refs/heads/") if ref.startswith("refs/heads/") else UNKNOWN
+            st["upstream"] = UNKNOWN
+    elif sub in ("send-pack", "http-push"):  # plumbing pushes: no refspec means matching
+        targets = [a for a in args if not a.startswith("-")]
+        return (len(targets) < 2 or bool(PUSH_ALL & set(args))
+                or _push_denied(args, st["branch"], UNKNOWN, UNKNOWN, []))
     elif sub == "push":
         b, up, pd = (UNKNOWN,) * 3 if elsewhere else (st["branch"], st["upstream"], st["push_default"])
         up = cfg.get(f"branch.{b}.merge", up)
         up = up.removeprefix("refs/heads/") if isinstance(up, str) else up
         pd = cfg.get("push.default", pd)
         remote_push = [v for k, vals in cfg.items() if _multi(k) for v in vals] + st["remote_push"]
-        if st["opaque"] or any(k.startswith(INCLUDE) for k in cfg):  # config we can't read
-            up, pd, remote_push = UNKNOWN, UNKNOWN, remote_push + [UNKNOWN]
+        mirror = st["mirror"] or any(k.startswith("remote.") and k.endswith(".mirror")
+                                     and str(v).lower() in TRUE for k, v in cfg.items())
+        if opaque:
+            up, pd, remote_push, mirror = UNKNOWN, UNKNOWN, remote_push + [UNKNOWN], True
+        if mirror and len([a for a in args if not a.startswith("-")]) < 2:
+            return True  # remote.<name>.mirror pushes every branch
         return _push_denied(args, b, up, pd, remote_push)
     return False
 
@@ -284,11 +349,11 @@ def _walk(command, st, depth=0) -> bool:
     """
     if depth > 5:  # an alias loop: git refuses it, and so do we
         return True
-    if GIT_ENV.search(command):
-        st["opaque"] = True
+    if GIT_ENV.search(command):  # GIT_DIR can also mean another repo's HEAD
+        st.update(opaque=True, branch=UNKNOWN)
     for segment in _segments(command):
         words = _words(segment)
-        if _first_command(words) in ("cd", "pushd"):
+        if _changes_dir(words):
             st.update(branch=UNKNOWN, upstream=UNKNOWN, push_default=UNKNOWN)
         for j, w in enumerate(words):
             if _prog(w) == "git" and _git(words, j, st, depth):
@@ -297,12 +362,14 @@ def _walk(command, st, depth=0) -> bool:
 
 
 def merge_guard_decision(tool_name, tool_input, autonomy, current_branch,
-                         upstream=None, push_default=None, remote_push=(), aliases=None):
+                         upstream=None, push_default=None, remote_push=(), aliases=None,
+                         mirror=False):
     """Return "deny" when an agent tries to merge or push to main below autonomy level 3.
 
     The rest is the repo's saved git config: upstream is the branch the current branch
     tracks (e.g. "main"), push_default is push.default, remote_push lists every
-    remote.<name>.push value, and aliases maps alias names (lowercase) to their bodies.
+    remote.<name>.push value, aliases maps alias names (lowercase) to their bodies, and
+    mirror is True when any remote.<name>.mirror is set.
     """
     if autonomy == 3:
         return None
@@ -320,5 +387,5 @@ def merge_guard_decision(tool_name, tool_input, autonomy, current_branch,
         return "deny"
     st = {"branch": current_branch, "upstream": upstream, "push_default": push_default,
           "remote_push": list(remote_push), "aliases": dict(aliases or {}), "config": {},
-          "opaque": False}
+          "opaque": False, "mirror": bool(mirror)}
     return "deny" if _walk(command, st) else None

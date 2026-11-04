@@ -51,7 +51,9 @@ sessions too, where `~/.claude` does not exist.
   `echo git push origin main` is denied), and after `cd`, `git -C`, `GIT_DIR`/`GIT_CONFIG*`,
   `-c include.path` or a checkout, a push without a branch named (`git push`) is
   denied. Name the branch. Aliases (`-c alias.*`, saved, or set earlier in the command)
-  are expanded. `tests/test_push_probes.py` runs every push against real git.
+  are expanded, and with unreadable config any non-builtin subcommand is denied.
+  `git send-pack`/`http-push` get the same refspec rules. `tests/test_push_probes.py`
+  runs every push against real git and checks origin's refs as well as the pre-push hook.
 - Local git hooks don't run in cloud sessions; CI is the backstop there.
 - The cloud signal `CLAUDE_CODE_REMOTE` and private-repo plugin install in cloud sessions
   are to be confirmed on first use.
