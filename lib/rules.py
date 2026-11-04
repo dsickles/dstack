@@ -84,6 +84,10 @@ GIT_ENV = re.compile(r"\bGIT_(CONFIG|DIR|WORK_TREE)")  # env vars that change gi
 GIT_OPT_WITH_ARG = {"-c", "-C", "--git-dir", "--work-tree", "--namespace", "--config-env",
                     "--super-prefix"}
 NEW_BRANCH_OPTS = {"-b", "-B", "-c", "-C", "--orphan"}
+WRAPPERS = {"command", "builtin", "env", "exec", "sudo", "nohup", "time", "xargs"}
+ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+NOT_ALIASABLE = {"push", "config", "checkout", "switch", "branch"}  # git ignores such aliases
+INCLUDE = ("include.", "includeif.")
 
 
 def _segments(command: str):
@@ -110,11 +114,30 @@ def _config_key(key: str) -> str:
     return ".".join([parts[0].lower(), *parts[1:-1], parts[-1].lower()])
 
 
+def _multi(key: str) -> bool:
+    return key.startswith("remote.") and key.endswith(".push")
+
+
+def _set(config, key, value):
+    """remote.<name>.push keeps every value (git pushes them all); other keys: last wins."""
+    if _multi(key):
+        config.setdefault(key, []).append(value)
+    else:
+        config[key] = value
+
+
+def _merge(saved, cli):
+    out = {k: list(v) if _multi(k) else v for k, v in saved.items()}
+    for k, v in cli.items():
+        out[k] = out.get(k, []) + v if _multi(k) else v
+    return out
+
+
 def _git_call(words, j):
     """Parse `git [global options] <subcommand> <args>` at words[j].
 
-    Returns the subcommand, the `-c` settings (last wins), the arguments, and whether
-    -C/--git-dir/--work-tree point git at another repo.
+    Returns the subcommand, the `-c` settings, the arguments, where the subcommand sits,
+    and whether -C/--git-dir/--work-tree point git at another repo.
     """
     config, elsewhere, i = {}, False, j + 1
     while i < len(words) and words[i].startswith("-"):
@@ -124,18 +147,18 @@ def _git_call(words, j):
             val = words[i] if i < len(words) else ""
         if name == "-c":
             key, _, value = val.partition("=")
-            config[_config_key(key)] = value or "true"
+            _set(config, _config_key(key), value or "true")
         elif name == "--config-env":
-            config[_config_key(val.partition("=")[0])] = UNKNOWN
+            _set(config, _config_key(val.partition("=")[0]), UNKNOWN)
         elif name in ("-C", "--git-dir", "--work-tree"):
             elsewhere = True
         i += 1
     sub = words[i] if i < len(words) else ""
-    return sub, config, words[i + 1:], elsewhere
+    return sub, config, words[i + 1:], i, elsewhere
 
 
 def _config_write(args):
-    """`git config [--global] key value` or `git config set key value`: (key, value)."""
+    """`git config [--global|--add] key value` or `git config set key value`: (key, value)."""
     if any(a.startswith(("--get", "--unset", "--list", "--remove", "--rename", "-l"))
            for a in args):
         return None
@@ -154,19 +177,39 @@ def _checkout_target(args):
             return args[i + 1] if i + 1 < len(args) else UNKNOWN
         if a == "--":
             return None
+        if a == "-" or a.startswith("@{"):  # the previous branch: can't tell which
+            return UNKNOWN
         if not a.startswith("-"):
             return a
     return None
 
 
-def _push_denied(args, branch, upstream, push_default, config) -> bool:
+def _branch_cmd(args, st):
+    """`git branch -m/-M` renames the current branch; `-u` sets its upstream."""
+    pos = [a for a in args if not a.startswith("-")]
+    up = None
+    for i, a in enumerate(args):
+        if a in ("-u", "--set-upstream-to"):
+            up = args[i + 1] if i + 1 < len(args) else UNKNOWN
+        elif a.startswith("--set-upstream-to="):
+            up = a.partition("=")[2]
+        elif a.startswith("-u") and not a.startswith("--"):
+            up = a[2:]
+    if up is not None:
+        others = [p for p in pos if p != up]
+        if not others or others[0] == st["branch"]:
+            st["upstream"] = UNKNOWN if up == UNKNOWN else up.split("/", 1)[-1]
+    elif {"-m", "-M", "--move"} & set(args):
+        if len(pos) == 1 or (len(pos) == 2 and pos[0] in (st["branch"], UNKNOWN)):
+            st["branch"] = pos[-1]
+
+
+def _push_denied(args, branch, upstream, push_default, remote_push) -> bool:
     if PUSH_ALL & set(args):
         return True
     targets = [w for w in args if not w.startswith("-")]
-    refspecs = targets[1:]  # targets[0] is the remote
-    if not refspecs:  # git uses remote.<name>.push, else branch, upstream and push.default
-        refspecs = [v for k, v in config.items() if k.startswith("remote.") and k.endswith(".push")]
-    if not refspecs:
+    refspecs = targets[1:] or remote_push  # no refspec: git uses remote.<name>.push
+    if not refspecs:  # then the branch, its upstream and push.default decide
         return (branch in PROTECTED or upstream in PROTECTED or UNKNOWN in (branch, upstream)
                 or push_default in ("matching", UNKNOWN))
     for ref in refspecs:
@@ -193,45 +236,73 @@ def _gh_merges(words) -> bool:
     return False
 
 
-def _pushes_protected(command, branch, upstream, push_default) -> bool:
+def _first_command(words) -> str:
+    for w in words:
+        if not (ASSIGNMENT.match(w) or _prog(w) in WRAPPERS or w.startswith("-")):
+            return _prog(w)
+    return ""
+
+
+def _git(words, j, st, depth) -> bool:
+    """Check one git call; update the tracked state for calls that change it."""
+    sub, cli, args, at, elsewhere = _git_call(words, j)
+    cfg = _merge(st["config"], cli)
+    alias = None if sub in NOT_ALIASABLE else cfg.get(f"alias.{sub.lower()}",
+                                                          st["aliases"].get(sub.lower()))
+    if alias:
+        if alias == UNKNOWN:
+            return True
+        rest = " " + shlex.join(args) if args else ""
+        if alias.startswith("!"):  # a shell alias runs as its own command
+            return _walk(alias[1:] + rest, st, depth + 1)
+        return _walk(shlex.join(words[j:at]) + " " + alias + rest, st, depth + 1)
+    if sub == "config" and (kv := _config_write(args)):
+        _set(st["config"], *kv)
+    elif sub in ("checkout", "switch"):
+        target = _checkout_target(args)
+        if target and target != st["branch"]:
+            st["branch"], st["upstream"] = target, UNKNOWN
+    elif sub == "branch":
+        _branch_cmd(args, st)
+    elif sub == "push":
+        b, up, pd = (UNKNOWN,) * 3 if elsewhere else (st["branch"], st["upstream"], st["push_default"])
+        up = cfg.get(f"branch.{b}.merge", up)
+        up = up.removeprefix("refs/heads/") if isinstance(up, str) else up
+        pd = cfg.get("push.default", pd)
+        remote_push = [v for k, vals in cfg.items() if _multi(k) for v in vals] + st["remote_push"]
+        if st["opaque"] or any(k.startswith(INCLUDE) for k in cfg):  # config we can't read
+            up, pd, remote_push = UNKNOWN, UNKNOWN, remote_push + [UNKNOWN]
+        return _push_denied(args, b, up, pd, remote_push)
+    return False
+
+
+def _walk(command, st, depth=0) -> bool:
     """Walk the command in order, tracking what earlier parts change (cd, checkout,
-    git config), and check every `git ... push` wherever git appears in a segment.
-    Seeing git anywhere (e.g. `echo git push origin main`) is fail-closed on purpose.
+    branch -m/-u, git config, aliases), and check every `git ... push` wherever git
+    appears in a segment. Seeing git anywhere (e.g. `echo git push origin main`) is
+    fail-closed on purpose.
     """
-    config = {}
+    if depth > 5:  # an alias loop: git refuses it, and so do we
+        return True
     if GIT_ENV.search(command):
-        upstream, push_default = UNKNOWN, UNKNOWN
+        st["opaque"] = True
     for segment in _segments(command):
         words = _words(segment)
-        if words and _prog(words[0]) in ("cd", "pushd"):
-            branch, upstream, push_default = UNKNOWN, UNKNOWN, UNKNOWN
+        if _first_command(words) in ("cd", "pushd"):
+            st.update(branch=UNKNOWN, upstream=UNKNOWN, push_default=UNKNOWN)
         for j, w in enumerate(words):
-            if _prog(w) != "git":
-                continue
-            sub, cli, args, elsewhere = _git_call(words, j)
-            if sub == "config" and (kv := _config_write(args)):
-                config[kv[0]] = kv[1]
-            elif sub in ("checkout", "switch"):
-                target = _checkout_target(args)
-                if target and target != branch:
-                    branch, upstream = target, UNKNOWN
-            elif sub == "push":
-                eff = {**config, **cli}
-                b, up, pd = (UNKNOWN,) * 3 if elsewhere else (branch, upstream, push_default)
-                up = eff.get(f"branch.{b}.merge", up)
-                up = up.removeprefix("refs/heads/") if isinstance(up, str) else up
-                pd = eff.get("push.default", pd)
-                if _push_denied(args, b, up, pd, eff):
-                    return True
+            if _prog(w) == "git" and _git(words, j, st, depth):
+                return True
     return False
 
 
 def merge_guard_decision(tool_name, tool_input, autonomy, current_branch,
-                         upstream=None, push_default=None):
+                         upstream=None, push_default=None, remote_push=(), aliases=None):
     """Return "deny" when an agent tries to merge or push to main below autonomy level 3.
 
-    upstream is the remote branch the current branch tracks (e.g. "main"); push_default is
-    git's configured push.default.
+    The rest is the repo's saved git config: upstream is the branch the current branch
+    tracks (e.g. "main"), push_default is push.default, remote_push lists every
+    remote.<name>.push value, and aliases maps alias names (lowercase) to their bodies.
     """
     if autonomy == 3:
         return None
@@ -247,6 +318,7 @@ def merge_guard_decision(tool_name, tool_input, autonomy, current_branch,
         return "deny"
     if any(_gh_merges(_words(s)) for s in _segments(command)):
         return "deny"
-    if _pushes_protected(command, current_branch, upstream, push_default):
-        return "deny"
-    return None
+    st = {"branch": current_branch, "upstream": upstream, "push_default": push_default,
+          "remote_push": list(remote_push), "aliases": dict(aliases or {}), "config": {},
+          "opaque": False}
+    return "deny" if _walk(command, st) else None

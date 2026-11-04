@@ -38,7 +38,14 @@ def _repo_state(cwd):
     branch = _git(["branch", "--show-current"], where)
     upstream = _git(["config", f"branch.{branch}.merge"], where).removeprefix("refs/heads/") if branch else ""
     push_default = _git(["config", "push.default"], where)
-    return autonomy, branch, upstream, push_default
+    remote_push = [line.split(" ", 1)[1] for line in
+                   _git(["config", "--get-regexp", r"^remote\..*\.push$"], where).splitlines()
+                   if " " in line]
+    aliases = {}
+    for line in _git(["config", "--get-regexp", r"^alias\."], where).splitlines():
+        name, _, body = line.partition(" ")
+        aliases[name.removeprefix("alias.").lower()] = body
+    return autonomy, branch, upstream, push_default, remote_push, aliases
 
 
 def decide(payload):
@@ -46,8 +53,9 @@ def decide(payload):
     tool_input = payload.get("tool_input") or {}
 
     if tool == "Bash" or (tool.startswith("mcp__") and "merge" in tool.rpartition("__")[2].lower()):
-        autonomy, branch, upstream, push_default = _repo_state(payload.get("cwd"))
-        if rules.merge_guard_decision(tool, tool_input, autonomy, branch, upstream, push_default) == "deny":
+        autonomy, branch, upstream, push_default, remote_push, aliases = _repo_state(payload.get("cwd"))
+        if rules.merge_guard_decision(tool, tool_input, autonomy, branch, upstream, push_default,
+                                      remote_push, aliases) == "deny":
             return _decision("deny", "dstack merge guard: Dan merges, and agents never push to main "
                                      "below autonomy level 3. Push a branch and open a PR instead.")
 

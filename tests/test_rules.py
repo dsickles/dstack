@@ -249,6 +249,50 @@ class MergeGuard(unittest.TestCase):
             with self.subTest(cmd=cmd):
                 self.assertIsNone(self.bash(cmd))
 
+    # Hopper round 4. tests/test_push_probes.py runs each one against real git.
+    def test_round_four_state_changes(self):
+        for cmd in ["git checkout - && git push origin HEAD", "git switch - && git push",
+                    "git checkout @{-1} && git push origin HEAD",
+                    "git branch -M main && git push origin HEAD",
+                    "git branch -M feature main && git push",
+                    "git branch -u origin/main && git push",
+                    "git branch --set-upstream-to=origin/main && git push",
+                    "command cd ../x && git push origin HEAD",
+                    "builtin cd ../x && git push", "git -c include.path=/tmp/x push",
+                    "git -c includeIf.onbranch:feature.path=/tmp/x push"]:
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.bash(cmd), "deny")
+        for cmd in ["git branch -m feature2 && git push origin HEAD",
+                    "git branch -u origin/feature && git push",
+                    "git branch -M old main && git push origin HEAD"]:
+            with self.subTest(cmd=cmd):
+                self.assertIsNone(self.bash(cmd))
+
+    def test_every_remote_push_value_counts(self):
+        cmd = ("git -c remote.origin.push=refs/heads/feature:refs/heads/main "
+               "-c remote.origin.push=refs/heads/feature:refs/heads/feature push origin")
+        self.assertEqual(self.bash(cmd), "deny")
+        saved = ["refs/heads/feature:refs/heads/feature", "HEAD:refs/heads/main"]
+        self.assertEqual(rules.merge_guard_decision("Bash", {"command": "git push origin"}, 2,
+                                                    "feature", remote_push=saved), "deny")
+        self.assertIsNone(rules.merge_guard_decision("Bash", {"command": "git push origin feature"},
+                                                     2, "feature", remote_push=saved))
+
+    def test_aliases_are_expanded(self):
+        for cmd in ["git -c alias.ship='push origin main' ship",
+                    "git -c alias.ship='!git push origin main' ship",
+                    "git -c alias.ship='!f() { git push origin main; }; f' ship",
+                    "git config alias.ship 'push --all' && git ship",
+                    "git -c alias.a=b -c alias.b=a a"]:
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.bash(cmd), "deny")
+        saved = {"ship": "push origin HEAD:main", "p": "push -u origin HEAD"}
+        decide = lambda c: rules.merge_guard_decision("Bash", {"command": c}, 2, "feature",
+                                                      aliases=saved)
+        self.assertEqual(decide("git Ship"), "deny")
+        self.assertIsNone(decide("git p"))
+        self.assertIsNone(self.bash("git -c alias.push='push origin main' push origin feature"))
+
     def test_non_string_command_raises(self):
         with self.assertRaises(TypeError):
             rules.merge_guard_decision("Bash", {"command": ["gh", "pr", "merge"]}, 1, "feature")

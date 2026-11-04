@@ -45,12 +45,13 @@ sessions too, where `~/.claude` does not exist.
 - The approval gate matches tool names, so a messaging tool with an unusual verb slips
   through, and browser clicks that send messages are not covered.
 - The merge guard reads the command text. A push hidden inside `bash -c '...'` or a
-  script file is not seen; CI and Dan's merge are the backstop. It also does not read a
-  saved `remote.<name>.push` setting (one set on the command line is read).
+  script file is not seen; CI and Dan's merge are the backstop. Nor is a push through a
+  shell variable (`b=main; git push origin $b`).
 - The guard is fail-closed where it can't tell: any word that is `git` starts a check (so
-  `echo git push origin main` is denied), and after `cd`, `git -C`, `GIT_DIR`/`GIT_CONFIG*`
-  or a checkout, a push without a branch named (`git push`) is denied. Name the branch.
-  `tests/test_push_probes.py` dry-runs the pushes against real git.
+  `echo git push origin main` is denied), and after `cd`, `git -C`, `GIT_DIR`/`GIT_CONFIG*`,
+  `-c include.path` or a checkout, a push without a branch named (`git push`) is
+  denied. Name the branch. Aliases (`-c alias.*`, saved, or set earlier in the command)
+  are expanded. `tests/test_push_probes.py` runs every push against real git.
 - Local git hooks don't run in cloud sessions; CI is the backstop there.
 - The cloud signal `CLAUDE_CODE_REMOTE` and private-repo plugin install in cloud sessions
   are to be confirmed on first use.
