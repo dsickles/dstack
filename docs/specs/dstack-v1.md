@@ -40,7 +40,7 @@ enforcement that applies to every repo, agent and tool.
 | 4 | Commit messages: conventional, `chore(<bot>):`, Almanac prefixes, merges and reverts pass; anything else fails | `tests/test_rules.py` |
 | 5 | PR titles need `type: summary (DAS-n)`, except `chore(<bot>):` automation | `tests/test_rules.py`, `tests/test_guard_workflow.py` |
 | 6 | The approval gate asks before MCP tools that message people; Linear and GitHub pass | `tests/test_rules.py`, `tests/test_pretooluse.py` |
-| 7 | The merge guard denies merges and main pushes below autonomy level 3 | `tests/test_rules.py`, `tests/test_pretooluse.py` |
+| 7 | The merge guard denies merges and main pushes below autonomy level 3, for every command in its tests. The bypasses under Known limits in `docs/architecture.md` are accepted; new ones go to DAS-139 (agreed with Dan 2026-11-09) | `tests/test_rules.py::MergeGuard`, `tests/test_pretooluse.py`, `tests/test_push_probes.py` |
 | 8 | SessionStart says "run /kickoff" in an unset repo, else reports branch, changes, commits behind | `tests/test_session_start.py` |
 | 9 | gitleaks scans staged changes locally and the PR range in CI | CI run on the PR |
 | 10 | `scripts/check.sh` runs all of the above and CI runs it | CI run on the PR |

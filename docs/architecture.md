@@ -54,6 +54,8 @@ sessions too, where `~/.claude` does not exist.
   are expanded, and with unreadable config any non-builtin subcommand is denied.
   `git send-pack`/`http-push` get the same refspec rules. `tests/test_push_probes.py`
   runs every push against real git and checks origin's refs as well as the pre-push hook.
+- These limits are accepted for v1 (AC 7, agreed with Dan 2026-11-09). New bypasses, and
+  a GitHub rule on `main` that refuses direct pushes server-side, are tracked in DAS-139.
 - Local git hooks don't run in cloud sessions; CI is the backstop there.
 - The cloud signal `CLAUDE_CODE_REMOTE` and private-repo plugin install in cloud sessions
   are to be confirmed on first use.
