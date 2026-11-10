@@ -1,0 +1,58 @@
+# Reusable guard for every DASSoft repo. Call it from the repo's CI:
+#   jobs:
+#     guard:
+#       uses: dsickles/dstack/.github/workflows/guard.yml@main
+# It must stay self-contained: a caller's token can't read this private repo's files.
+# tests/test_guard_workflow.py keeps the title patterns below in sync with lib/rules.py.
+name: guard
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  GITLEAKS_VERSION: "8.30.1"
+  PR_TITLE_PATTERN: '^(feat|fix|chore|docs|refactor|test|perf|build|ci|style|revert)(\([a-z0-9._/-]+\))?!?: \S.* \(DAS-\d+\)$'
+  AUTOMATION_PR_PATTERN: '^chore\([a-z0-9-]+\): \S'
+
+jobs:
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks
+        run: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+      - name: Scan new commits
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            range="-1 $HEAD"
+          else
+            range="$BASE..$HEAD"
+          fi
+          gitleaks git --log-opts="$range" --redact --no-banner -v .
+
+  pr-title:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          python3 - <<'EOF'
+          import os, re, sys
+          title = os.environ["TITLE"]
+          if re.match(os.environ["PR_TITLE_PATTERN"], title) or re.match(os.environ["AUTOMATION_PR_PATTERN"], title):
+              sys.exit(0)
+          print(f"PR title must be `type: summary (DAS-n)`, e.g. `feat: add menu (DAS-66)`. Got: {title}")
+          sys.exit(1)
+          EOF

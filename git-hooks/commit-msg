@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Global commit-msg: checks Dan's message format, then the repo's own commit-msg hook.
+set -euo pipefail
+dstack="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+py="$(command -v python3 || command -v python)"
+"$py" "$dstack/scripts/commit_msg_check.py" "$1"
+exec bash "$dstack/git-hooks/chain.sh" commit-msg "$@"
