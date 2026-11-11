@@ -53,11 +53,14 @@ Where those repo permissions load (Claude Code settings docs, checked 2026-11-11
 
 - **Threads in a claude.ai project:** never, however many repositories the project has.
   The cloud environment's setup script writes the same allow list into the session
-  machine's own `~/.claude/settings.json` (README, Set up). The docs' "user settings are
-  not read" means the file on your PC, which never reaches the cloud. The machine's own
-  file is read: it is where `claude plugin install` enables dstack, and on 2026-11-11 a
-  `permissions.deny` rule added to it in a live project thread removed that tool from
-  the session at once, and removing the rule brought it back.
+  machine's own `~/.claude/settings.json` (README, Set up). **This is observed, not
+  documented:** the settings docs list `~/.claude/settings.json` as not read in a cloud
+  session, meaning the file on your PC. What was seen in project threads on the dstack
+  environment (2026-11-11): the setup script's `claude plugin install` writes dstack's
+  `enabledPlugins` into that file, and nothing else enables dstack there, yet dstack's
+  SessionStart hook runs at session start. And a `permissions.deny` rule added to that file
+  mid-session removed the tool from the session; removing it brought the tool back. If
+  Claude Code stops reading the file, the plugin stops loading too, so it shows at once.
 - **A cloud session with one repository, outside a project:** yes.
 - **A cloud session with several repositories:** only `enabledPlugins` and
   `extraKnownMarketplaces`.

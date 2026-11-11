@@ -54,7 +54,8 @@ import json, pathlib
 p = pathlib.Path.home() / ".claude" / "settings.json"
 s = json.loads(p.read_text()) if p.exists() else {}
 allow = s.setdefault("permissions", {}).setdefault("allow", [])
-for rule in ["mcp__Linear", "mcp__claude_ai_Linear", "mcp__github", "mcp__claude_ai_GitHub"]:
+for rule in ["mcp__Linear", "mcp__claude_ai_Linear", "mcp__github",
+             "mcp__claude_ai_GitHub", "mcp__claude_ai_Github"]:
     if rule not in allow:
         allow.append(rule)
 p.parent.mkdir(exist_ok=True)
@@ -64,7 +65,9 @@ PY
 
 The last step pre-approves the Linear and GitHub tools, so cloud threads don't stop on
 them. Threads in a claude.ai project ignore a repo's own `.claude/settings.json`
-permissions, so this has to live in the environment. dstack's hooks still run first: the
+permissions, so this has to live in the environment. That a thread reads this file is
+observed, not documented (see docs/architecture.md); if a thread still stops on Linear,
+check here first. dstack's hooks still run first: the
 merge guard still denies merges and writes to main.
 
 **Claude Code on a PC.**

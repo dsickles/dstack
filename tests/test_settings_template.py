@@ -22,6 +22,7 @@ WORKFLOW_CALLS = [
     "mcp__github__create_pull_request",
     "mcp__github__update_pull_request",
     "mcp__claude_ai_GitHub__create_pull_request",
+    "mcp__claude_ai_Github__get_me",  # spelling seen in a captured headless session
 ]
 
 
