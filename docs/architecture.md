@@ -31,14 +31,17 @@ and as a source of templates that `/kickoff` copies into other repos.
    - `PreToolUse` (`pretooluse.py`): the merge guard denies `gh pr merge`, MCP merge tools
      and pushes to main/master unless the project's AGENTS.md says autonomy level 3; the
      approval gate asks before MCP tools whose names send, reply, forward, invite or create
-     calendar events. Linear and GitHub tools pass. If the hook can't read a call or
-     crashes, it denies.
+     calendar events. Linear and GitHub tools pass, and so do the Claude app's own tools
+     (`ccd_*`, `hearthbot`, `claude-code-remote`), which reply to Dan in his project threads
+     or wake the same session. If the hook can't read a call or crashes, it denies.
 
 ## How a repo gets dstack
 
 `/kickoff` writes the repo's `.claude/settings.json` from `templates/claude-settings.json`,
-which registers dstack as a plugin marketplace and enables the plugin. That works in cloud
-sessions too, where `~/.claude` does not exist.
+which registers dstack as a plugin marketplace and enables the plugin. In cloud sessions
+that alone did not install it (tested 2026-11-11), and plugins added in claude.ai Customize
+did not sync either. Cloud projects get dstack from a cloud environment whose setup script
+runs `claude plugin marketplace add dsickles/dstack` and `claude plugin install dstack@dstack`.
 
 ## Known limits
 

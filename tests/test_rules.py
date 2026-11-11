@@ -102,6 +102,16 @@ class ApprovalGate(unittest.TestCase):
             with self.subTest(tool=tool):
                 self.assertIsNone(rules.gate_decision(tool))
 
+    def test_lets_claude_app_thread_tools_through(self):
+        for tool in [
+            "mcp__hearthbot__post_message",
+            "mcp__hearthbot__message_coordinator",
+            "mcp__hearthbot__message_thread",
+            "mcp__claude-code-remote__send_later",
+        ]:
+            with self.subTest(tool=tool):
+                self.assertIsNone(rules.gate_decision(tool))
+
 
 class Autonomy(unittest.TestCase):
     def test_parse(self):
