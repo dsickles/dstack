@@ -1,0 +1,17 @@
+{
+  "extraKnownMarketplaces": {
+    "dstack": {
+      "source": { "source": "github", "repo": "dsickles/dstack" }
+    }
+  },
+  "enabledPlugins": {
+    "dstack@dstack": true
+  },
+  "permissions": {
+    "allow": [
+      "mcp__Linear",
+      "mcp__claude_ai_Linear",
+      "mcp__github"
+    ]
+  }
+}
