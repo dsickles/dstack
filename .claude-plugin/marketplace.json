@@ -1,11 +1,13 @@
 {
   "name": "dstack",
-  "owner": { "name": "Dan Sickles" },
+  "owner": {
+    "name": "dsickles"
+  },
   "plugins": [
     {
       "name": "dstack",
       "source": "./",
-      "description": "Dan's software factory: /kickoff, session check, message approval gate and merge guard."
+      "description": "A software factory for building with AI agents: /kickoff, session check, message approval gate and merge guard."
     }
   ]
 }

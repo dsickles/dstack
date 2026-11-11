@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run a repo's own hook after dstack's: scripts/hooks/<name> (Ledger style), then
+# Run a repo's own hook after dstack's: scripts/hooks/<name> (committed), then
 # .git/hooks/<name>. A global core.hooksPath hides both, so dstack calls them itself.
 set -euo pipefail
 name="$1"; shift

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Global commit-msg: checks Dan's message format, then the repo's own commit-msg hook.
+# Global commit-msg: checks the dstack message format, then the repo's own commit-msg hook.
 set -euo pipefail
 dstack="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 

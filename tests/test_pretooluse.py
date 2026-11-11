@@ -11,11 +11,18 @@ from pathlib import Path
 HOOK = Path(__file__).resolve().parent.parent / "hooks" / "pretooluse.py"
 
 
-def run(payload, project):
-    env = dict(os.environ, CLAUDE_PROJECT_DIR=str(project))
+def run_raw(payload, project):
+    # HOME is the project too, so the machine's own ~/.dstack/config.json can't leak in.
+    env = dict(os.environ, CLAUDE_PROJECT_DIR=str(project), HOME=str(project),
+               USERPROFILE=str(project))
     r = subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload),
                        capture_output=True, text=True, env=env, check=True)
-    return json.loads(r.stdout)["hookSpecificOutput"]["permissionDecision"] if r.stdout.strip() else None
+    return json.loads(r.stdout)["hookSpecificOutput"] if r.stdout.strip() else None
+
+
+def run(payload, project):
+    out = run_raw(payload, project)
+    return out["permissionDecision"] if out else None
 
 
 class PreToolUse(unittest.TestCase):
@@ -35,6 +42,16 @@ class PreToolUse(unittest.TestCase):
         (self.project / "AGENTS.md").write_text("**Autonomy level:** 3 Automate\n")
         p = {"tool_name": "Bash", "tool_input": {"command": "gh pr merge 4"}, "cwd": str(self.project)}
         self.assertIsNone(run(p, self.project))
+
+    def test_messages_name_the_owner_from_config(self):
+        merge = {"tool_name": "Bash", "tool_input": {"command": "gh pr merge 4"},
+                 "cwd": str(self.project)}
+        send = {"tool_name": "mcp__gmail__send_email", "tool_input": {}}
+        self.assertIn("the owner merges", run_raw(merge, self.project)["permissionDecisionReason"])
+        (self.project / ".dstack").mkdir()
+        (self.project / ".dstack" / "config.json").write_text(json.dumps({"owner": "Ada"}))
+        self.assertIn("Ada merges", run_raw(merge, self.project)["permissionDecisionReason"])
+        self.assertIn("for Ada", run_raw(send, self.project)["permissionDecisionReason"])
 
     def test_message_asks(self):
         p = {"tool_name": "mcp__gmail__send_email", "tool_input": {}}

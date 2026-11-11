@@ -65,10 +65,21 @@ class SessionStart(unittest.TestCase):
         plain.mkdir()
         self.assertIn("/kickoff", session_start.report(plain, fetch=False))
 
-    def test_cloud_session_gets_how_i_work(self):
+    def test_cloud_session_gets_global_rules(self):
         env = dict(os.environ, CLAUDE_CODE_REMOTE="true")
-        self.assertTrue(session_start.include_how_i_work(env))
-        self.assertFalse(session_start.include_how_i_work({}))
+        self.assertTrue(session_start.include_global_rules(env))
+        self.assertFalse(session_start.include_global_rules({}))
+
+    def test_main_prints_config(self):
+        (self.repo / ".dstack").mkdir()
+        (self.repo / ".dstack" / "config.json").write_text('{"owner": "Ada", "review_bot": "Rex"}')
+        env = dict(os.environ, CLAUDE_PROJECT_DIR=str(self.repo), HOME=self.tmp.name,
+                   USERPROFILE=self.tmp.name, CLAUDE_CODE_REMOTE="true")
+        out = subprocess.run([sys.executable, str(ROOT / "hooks" / "session_start.py")],
+                             env=env, capture_output=True, text=True, check=True).stdout
+        self.assertIn("- Owner: Ada", out)
+        self.assertIn("- Review bot: Rex", out)
+        self.assertIn("# Global agent rules", out)
 
 
 if __name__ == "__main__":

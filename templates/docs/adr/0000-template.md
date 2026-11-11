@@ -2,7 +2,7 @@
 
 **Status:** <Accepted | Locked | Superseded by [NNNN](NNNN-slug.md)>
 **Date:** <YYYY-MM-DD>
-**Decided by:** Dan
+**Decided by:** <the owner's name>
 
 ## Context
 

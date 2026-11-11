@@ -6,7 +6,7 @@ Every acceptance criterion maps to a check, chosen before coding and written in 
 |---|---|---|
 | Logic, data and rules | A failing test first, then the code that turns it green | <test framework, where tests live> |
 | Bugs | A test that reproduces the bug first | <same> |
-| UI and feel | Manual steps written in the issue first, plus a cheap smoke test | <smoke test tool; Dan's device> |
+| UI and feel | Manual steps written in the issue first, plus a cheap smoke test | <smoke test tool; the owner's device> |
 | Content | A validator in CI | <validator command> |
 | Prototypes | No tests; never merged as-is | |
 

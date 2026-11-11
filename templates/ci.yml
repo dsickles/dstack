@@ -1,4 +1,4 @@
-# .github/workflows/ci.yml for a DASSoft repo. Replace the check step's setup and command.
+# .github/workflows/ci.yml for a repo that uses dstack. Replace the check step's setup and command.
 name: ci
 
 on:

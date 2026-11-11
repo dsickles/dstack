@@ -10,26 +10,34 @@ TYPES = "feat|fix|chore|docs|refactor|test|perf|build|ci|style|revert"
 SCOPE = r"(\([a-z0-9._/-]+\))?"
 
 CONVENTIONAL = re.compile(rf"^({TYPES}){SCOPE}!?: \S")
-ALMANAC = re.compile(r"^(capture|triage|harvest|health|context): \S")
+CONTENT = re.compile(r"^(capture|triage|harvest|health|context): \S")  # content-repo bots
 MERGE = re.compile(r"^Merge (branch|pull request|remote-tracking branch) ")
 REVERT = re.compile(r'^Revert ".+"')
 
-PR_TITLE = re.compile(rf"^({TYPES}){SCOPE}!?: \S.* \(DAS-\d+\)$")
+# The ticket key's prefix comes from the owner's config (`ticket_prefix`). Without one,
+# any upper-case key such as ABC-12 is accepted. guard.yml keeps a copy of these patterns.
+PR_TITLE_TEMPLATE = rf"^({TYPES}){SCOPE}!?: \S.* \(PREFIX-\d+\)$"
+ANY_PREFIX = "[A-Z][A-Z0-9]*"
 AUTOMATION_PR = re.compile(r"^chore\([a-z0-9-]+\): \S")
 
 
 def commit_msg_ok(message: str) -> bool:
-    """The first non-comment line must be a conventional, Almanac, merge or revert subject."""
+    """The first non-comment line must be a conventional, content-bot, merge or revert subject."""
     lines = [l for l in message.splitlines() if l.strip() and not l.startswith("#")]
     if not lines:
         return False
     subject = lines[0]
-    return any(p.match(subject) for p in (CONVENTIONAL, ALMANAC, MERGE, REVERT))
+    return any(p.match(subject) for p in (CONVENTIONAL, CONTENT, MERGE, REVERT))
 
 
-def pr_title_ok(title: str) -> bool:
-    """`type: summary (DAS-n)`, or a `chore(<bot>): ...` automation PR."""
-    return bool(PR_TITLE.match(title) or AUTOMATION_PR.match(title))
+def pr_title_pattern(prefix: str = "") -> str:
+    prefix = prefix.strip()
+    return PR_TITLE_TEMPLATE.replace("PREFIX", re.escape(prefix) if prefix else ANY_PREFIX)
+
+
+def pr_title_ok(title: str, prefix: str = "") -> bool:
+    """`type: summary (PREFIX-n)`, or a `chore(<bot>): ...` automation PR."""
+    return bool(re.match(pr_title_pattern(prefix), title) or AUTOMATION_PR.match(title))
 
 
 # Verbs that put words in front of a person. Matched on the tool's own name, not the
@@ -44,13 +52,13 @@ def _snake(name: str) -> str:
     return re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", name).lower()
 
 
-# The Claude app's own tools. They reply to Dan in his project threads or wake the same
-# session, so they talk to Dan, not to people for him.
+# The Claude app's own tools. They reply to the owner in their project threads or wake the
+# same session, so they talk to the owner, not to other people for them.
 CLAUDE_APP_SERVERS = {"hearthbot", "claude-code-remote"}
 
 
 def gate_decision(tool_name: str):
-    """Return "ask" for MCP tools that message people for Dan, else None."""
+    """Return "ask" for MCP tools that message people for the owner, else None."""
     if not tool_name.startswith("mcp__"):
         return None
     server, _, tool = tool_name[len("mcp__"):].partition("__")
@@ -400,7 +408,7 @@ def merge_guard_decision(tool_name, tool_input, autonomy, current_branch,
 # `claude plugin update` reports "already at the latest version" and running sessions keep
 # the old copy.
 SHIPPED_DIRS = ("skills/", "hooks/", "lib/", "templates/")
-SHIPPED_FILES = {"HOW-I-WORK.md"}
+SHIPPED_FILES = {"GLOBAL-AGENTS.md"}
 
 
 def version_bump_needed(changed_files) -> bool:

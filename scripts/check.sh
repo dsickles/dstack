@@ -18,9 +18,12 @@ for f in scripts/*.sh git-hooks/*; do
 done
 
 echo "== always-loaded docs stay under 150 lines"
-for f in HOW-I-WORK.md AGENTS.md templates/AGENTS.md; do
+for f in GLOBAL-AGENTS.md AGENTS.md templates/AGENTS.md; do
   n=$(wc -l < "$f")
   if [ "$n" -gt 150 ]; then echo "$f is $n lines (limit 150)" >&2; exit 1; fi
 done
+
+echo "== no private words in tracked files"
+"$py" scripts/leak_check.py
 
 echo "check passed"
