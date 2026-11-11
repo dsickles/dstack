@@ -2,7 +2,7 @@
 # Scan for secrets with gitleaks.
 #   secret-scan.sh            staged changes (pre-commit)
 #   secret-scan.sh A..B       a commit range (CI)
-# Finds gitleaks via $GITLEAKS, then PATH, then DASSoft/Tools next to this repo.
+# Finds gitleaks via $GITLEAKS, then PATH, then a Tools folder next to the dstack folder.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,7 +15,7 @@ for candidate in "$tools/gitleaks.exe" "$tools/gitleaks"; do
   if [ -z "$bin" ] && [ -x "$candidate" ]; then bin="$candidate"; fi
 done
 if [ -z "$bin" ]; then
-  echo "dstack: gitleaks not found. Put it in DASSoft/Tools or on PATH (see dstack README)." >&2
+  echo "dstack: gitleaks not found. Put it on PATH, in ../Tools next to dstack, or set GITLEAKS (see dstack README)." >&2
   exit 1
 fi
 

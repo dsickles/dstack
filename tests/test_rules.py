@@ -16,10 +16,10 @@ class CommitMessage(unittest.TestCase):
             "fix(engine): round cents down",
             "feat!: drop old save format",
             "chore(digest): daily transient retry 2026-W39",
-            "docs: explain check (DAS-66)",
-            "capture: 2026-11-01-caleb-solids",
-            "triage: 3 inbox items (sydney, rocky)",
-            "Merge pull request #10 from dsickles/foo",
+            "docs: explain check (ABC-66)",
+            "capture: 2026-11-01-new-note",
+            "triage: 3 inbox items (a, b)",
+            "Merge pull request #10 from someone/foo",
             "Merge branch 'main' into feature",
             'Revert "feat: add menu"',
             "# a comment line\nfeat: add menu",
@@ -47,24 +47,33 @@ class CommitMessage(unittest.TestCase):
 class PrTitle(unittest.TestCase):
     def test_accepts(self):
         for title in [
-            "feat: add menu (DAS-66)",
-            "fix(saves): keep last slot (DAS-7)",
-            "chore: kickoff (DAS-125)",
+            "feat: add menu (ABC-66)",
+            "fix(saves): keep last slot (ABC-7)",
+            "chore: kickoff (ABC-125)",
             "chore(digest): weekly digest 2026-W44",
         ]:
             with self.subTest(title=title):
                 self.assertTrue(rules.pr_title_ok(title))
+                self.assertTrue(rules.pr_title_ok(title, "ABC"))
 
     def test_rejects(self):
         for title in [
-            "DAS-121: local model harness",
+            "ABC-121: local model harness",
             "feat: add menu",
-            "feat: add menu (DAS-66, DAS-67)",
+            "feat: add menu (ABC-66, ABC-67)",
             "Roadmap 2.0 living blueprints",
-            "feat: add menu (das-66)",
+            "feat: add menu (abc-66)",
         ]:
             with self.subTest(title=title):
                 self.assertFalse(rules.pr_title_ok(title))
+                self.assertFalse(rules.pr_title_ok(title, "ABC"))
+
+    def test_prefix_from_config(self):
+        self.assertTrue(rules.pr_title_ok("feat: x (XY2-3)"))
+        self.assertFalse(rules.pr_title_ok("feat: x (XY2-3)", "ABC"))
+        self.assertTrue(rules.pr_title_ok("feat: x (A.B-3)", "A.B"))
+        self.assertFalse(rules.pr_title_ok("feat: x (AxB-3)", "A.B"))  # prefix is escaped
+        self.assertTrue(rules.pr_title_ok("feat: x (ABC-3)", "  "))  # blank = any prefix
 
 
 class ApprovalGate(unittest.TestCase):
@@ -173,7 +182,7 @@ class MergeGuard(unittest.TestCase):
 
     def test_allows_branch_work(self):
         for cmd in [
-            "git push -u origin sicklesdan/das-125-dstack",
+            "git push -u origin someone/abc-125-feature",
             "git push",
             "gh pr create --draft",
             "gh pr view 12",
@@ -195,7 +204,7 @@ class MergeGuard(unittest.TestCase):
     def test_unknown_level_is_guarded(self):
         self.assertEqual(self.bash("gh pr merge 3", autonomy=None), "deny")
 
-    # Hopper round 3 blockers. tests/test_push_probes.py checks the pushes against real git.
+    # Review round 3 blockers. tests/test_push_probes.py checks the pushes against real git.
     def test_glob_and_matching_refspecs_are_denied(self):
         for cmd in ["git push origin refs/heads/*", "git push origin refs/heads/*:refs/heads/*",
                     "git push origin +refs/heads/*", "git push origin 'refs/heads/*'",
@@ -207,7 +216,7 @@ class MergeGuard(unittest.TestCase):
         for cmd in ["FOO=1 git push origin main", "command git push origin main",
                     "env git push origin main", "env FOO=1 git push origin main",
                     "/usr/bin/git push origin main", "sudo git push origin main",
-                    "sudo -u dan git push origin main", "exec git push origin main",
+                    "sudo -u alice git push origin main", "exec git push origin main",
                     "nohup git push origin main", "time git push origin main",
                     "git.exe push origin main", "Git push origin main", "GIT.EXE push origin main",
                     r'"C:\Program Files\Git\bin\git.exe" push origin main',
@@ -259,7 +268,7 @@ class MergeGuard(unittest.TestCase):
             with self.subTest(cmd=cmd):
                 self.assertIsNone(self.bash(cmd))
 
-    # Hopper round 4. tests/test_push_probes.py runs each one against real git.
+    # Review round 4. tests/test_push_probes.py runs each one against real git.
     def test_round_four_state_changes(self):
         for cmd in ["git checkout - && git push origin HEAD", "git switch - && git push",
                     "git checkout @{-1} && git push origin HEAD",
@@ -303,7 +312,7 @@ class MergeGuard(unittest.TestCase):
         self.assertIsNone(decide("git p"))
         self.assertIsNone(self.bash("git -c alias.push='push origin main' push origin feature"))
 
-    # Hopper round 5. tests/test_push_probes.py runs each one against real git.
+    # Review round 5. tests/test_push_probes.py runs each one against real git.
     def test_round_five(self):
         for cmd in ["env -i -C ../x git push origin HEAD", "if cd ../x; then git push; fi",
                     "GIT_DIR=../x/.git git push origin @", "git checkout --orphan=main && git push",
@@ -328,7 +337,7 @@ class MergeGuard(unittest.TestCase):
 class PluginVersion(unittest.TestCase):
     def test_shipped_changes_need_a_bump(self):
         for files in [["lib/rules.py"], ["hooks/hooks.json"], ["skills/kickoff/SKILL.md"],
-                      ["HOW-I-WORK.md"], ["templates/AGENTS.md"], ["docs/x.md", "lib/rules.py"]]:
+                      ["GLOBAL-AGENTS.md"], ["templates/AGENTS.md"], ["docs/x.md", "lib/rules.py"]]:
             with self.subTest(files=files):
                 self.assertTrue(rules.version_bump_needed(files))
 

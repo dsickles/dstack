@@ -1,0 +1,8 @@
+# sha256 of lower-case words that must never appear in a tracked file.
+# Add one with: python3 scripts/leak_check.py --add WORD
+ec4f2dbb3b140095550c9afbbb69b5d6fd9e814b9da82fad0b34e9fcbe56f1cb
+5a574fd4fb32c90a8af12283b2d1b85d63a7b306fe0eaa702927973837f77cd6
+0a7cb27e52927eacabbb7ecc738b0fea50b3967945257c43a67eb753cb465bd0
+392a5bcbd71a7db2cfb9796c633326f7fba6730bdb0c801d3b0fd30886821000
+012965bce83f90abd38dcb22ae2126fc7608371b03ead1521dfb0dbd4853c82c
+8f4b799bf2be2a37aa03d467fde4fa1c5b6ba9749eeb0d6d361e9d7accef1d36

@@ -13,6 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
 
+import config  # noqa: E402
 import rules  # noqa: E402
 
 
@@ -30,8 +31,12 @@ def _git(args, cwd):
         return ""
 
 
+def _project(cwd):
+    return Path(os.environ.get("CLAUDE_PROJECT_DIR") or cwd or os.getcwd())
+
+
 def _repo_state(cwd):
-    project = Path(os.environ.get("CLAUDE_PROJECT_DIR") or cwd or os.getcwd())
+    project = _project(cwd)
     agents = project / "AGENTS.md"
     autonomy = rules.parse_autonomy(agents.read_text(encoding="utf-8")) if agents.exists() else None
     where = cwd or project
@@ -51,6 +56,7 @@ def _repo_state(cwd):
 
 
 def decide(payload):
+    owner = config.load(_project(payload.get("cwd")))["owner"]
     tool = payload.get("tool_name", "")
     tool_input = payload.get("tool_input") or {}
 
@@ -59,12 +65,12 @@ def decide(payload):
             _repo_state(payload.get("cwd"))
         if rules.merge_guard_decision(tool, tool_input, autonomy, branch, upstream, push_default,
                                       remote_push, aliases, mirror) == "deny":
-            return _decision("deny", "dstack merge guard: Dan merges, and agents never push to main "
-                                     "below autonomy level 3. Push a branch and open a PR instead.")
+            return _decision("deny", f"dstack merge guard: {owner} merges, and agents never push to "
+                                     "main below autonomy level 3. Push a branch and open a PR instead.")
 
     if rules.gate_decision(tool) == "ask":
-        return _decision("ask", f"dstack approval gate: {tool} sends a message to a person for Dan. "
-                                "Approve only if Dan saw the exact text and recipients.")
+        return _decision("ask", f"dstack approval gate: {tool} sends a message to a person for "
+                                f"{owner}. Approve only if {owner} saw the exact text and recipients.")
     return None
 
 
@@ -73,7 +79,7 @@ def main() -> int:
         result = decide(json.load(sys.stdin))
     except Exception as e:  # fail closed
         result = _decision("deny", f"dstack hook could not check this call ({type(e).__name__}). "
-                                   "Ask Dan, or fix the hook.")
+                                   "Ask the owner, or fix the hook.")
     if result:
         print(json.dumps(result))
     return 0

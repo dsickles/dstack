@@ -32,7 +32,7 @@ status: <draft | agreed | final>
 The Linear issues, in order, each one PR. Each is a thin, complete path that can be shown
 working on its own.
 
-1. <DAS-n: title> (blocked by: none)
+1. <PREFIX-n: title> (blocked by: none)
 
 ## Open questions
 
