@@ -325,11 +325,6 @@ class MergeGuard(unittest.TestCase):
         with self.assertRaises(TypeError):
             rules.merge_guard_decision("Bash", {"command": ["gh", "pr", "merge"]}, 1, "feature")
 
-
-if __name__ == "__main__":
-    unittest.main()
-
-
 class PluginVersion(unittest.TestCase):
     def test_shipped_changes_need_a_bump(self):
         for files in [["lib/rules.py"], ["hooks/hooks.json"], ["skills/kickoff/SKILL.md"],
@@ -351,3 +346,7 @@ class PluginVersion(unittest.TestCase):
         self.assertFalse(rules.version_raised("0.1.0", "0.1.0"))
         self.assertFalse(rules.version_raised("0.2.0", "0.1.9"))
         self.assertFalse(rules.version_raised("0.1.0", "banana"))
+
+
+if __name__ == "__main__":
+    unittest.main()
