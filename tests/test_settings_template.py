@@ -1,7 +1,11 @@
 """The settings dstack hands out pre-approve the tools the workflow calls."""
 
 import json
+import os
+import re
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -17,6 +21,7 @@ WORKFLOW_CALLS = [
     "mcp__claude_ai_Linear__save_issue",
     "mcp__github__create_pull_request",
     "mcp__github__update_pull_request",
+    "mcp__claude_ai_GitHub__create_pull_request",
 ]
 
 
@@ -51,12 +56,28 @@ class SettingsTemplate(unittest.TestCase):
 
     def test_readme_setup_script_adds_the_same_allow_list(self):
         # Project threads ignore a repo's permission rules, so the cloud setup script
-        # writes the same list into the session's ~/.claude/settings.json.
-        allow = load("templates/claude-settings.json")["permissions"]["allow"]
+        # writes the same list into the session machine's ~/.claude/settings.json.
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        for rule in allow:
-            self.assertIn(f'"{rule}"', readme)
+        script = re.search(r"python3 - <<'PY'\n(.*?)\nPY\n", readme, re.S).group(1)
+        allow = load("templates/claude-settings.json")["permissions"]["allow"]
+        with tempfile.TemporaryDirectory() as home:
+            settings = Path(home) / ".claude" / "settings.json"
+            env = dict(os.environ, HOME=home, USERPROFILE=home)
 
+            def run():
+                subprocess.run([sys.executable, "-c", script], env=env, check=True)
+                return json.loads(settings.read_text(encoding="utf-8"))
+
+            self.assertEqual(run()["permissions"]["allow"], allow)  # fresh machine
+            plugin = {"enabledPlugins": {"dstack@dstack": True},
+                      "permissions": {"allow": ["Bash(ls)", "mcp__github"]}}
+            settings.write_text(json.dumps(plugin), encoding="utf-8")
+            first = run()
+            self.assertEqual(run(), first)  # a second run adds nothing
+            self.assertIs(first["enabledPlugins"]["dstack@dstack"], True)  # keys survive
+            self.assertEqual(first["permissions"]["allow"][0], "Bash(ls)")
+            self.assertEqual(set(first["permissions"]["allow"]), set(allow) | {"Bash(ls)"})
+            self.assertEqual(len(first["permissions"]["allow"]), len(allow) + 1)
 
 if __name__ == "__main__":
     unittest.main()

@@ -11,7 +11,8 @@
     "allow": [
       "mcp__Linear",
       "mcp__claude_ai_Linear",
-      "mcp__github"
+      "mcp__github",
+      "mcp__claude_ai_GitHub"
     ]
   }
 }

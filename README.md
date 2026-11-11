@@ -54,7 +54,7 @@ import json, pathlib
 p = pathlib.Path.home() / ".claude" / "settings.json"
 s = json.loads(p.read_text()) if p.exists() else {}
 allow = s.setdefault("permissions", {}).setdefault("allow", [])
-for rule in ["mcp__Linear", "mcp__claude_ai_Linear", "mcp__github"]:
+for rule in ["mcp__Linear", "mcp__claude_ai_Linear", "mcp__github", "mcp__claude_ai_GitHub"]:
     if rule not in allow:
         allow.append(rule)
 p.parent.mkdir(exist_ok=True)
