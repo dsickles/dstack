@@ -44,12 +44,17 @@ def _snake(name: str) -> str:
     return re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", name).lower()
 
 
+# The Claude app's own tools. They reply to Dan in his project threads or wake the same
+# session, so they talk to Dan, not to people for him.
+CLAUDE_APP_SERVERS = {"hearthbot", "claude-code-remote"}
+
+
 def gate_decision(tool_name: str):
     """Return "ask" for MCP tools that message people for Dan, else None."""
     if not tool_name.startswith("mcp__"):
         return None
     server, _, tool = tool_name[len("mcp__"):].partition("__")
-    if server.startswith("ccd_"):  # Claude app internals (sessions, panes), not people
+    if server.startswith("ccd_") or server in CLAUDE_APP_SERVERS:
         return None
     return "ask" if MESSAGE_VERB.search(_snake(tool)) else None
 
