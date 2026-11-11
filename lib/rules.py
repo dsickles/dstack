@@ -394,3 +394,25 @@ def merge_guard_decision(tool_name, tool_input, autonomy, current_branch,
           "remote_push": list(remote_push), "aliases": dict(aliases or {}), "config": {},
           "opaque": False, "mirror": bool(mirror)}
     return "deny" if _walk(command, st) else None
+
+
+# What the plugin ships. A change here must raise .claude-plugin/plugin.json's version, or
+# `claude plugin update` reports "already at the latest version" and running sessions keep
+# the old copy.
+SHIPPED_DIRS = ("skills/", "hooks/", "lib/", "templates/")
+SHIPPED_FILES = {"HOW-I-WORK.md"}
+
+
+def version_bump_needed(changed_files) -> bool:
+    return any(f.startswith(SHIPPED_DIRS) or f in SHIPPED_FILES for f in changed_files)
+
+
+def _semver(v):
+    m = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", v.strip())
+    return tuple(int(x) for x in m.groups()) if m else None
+
+
+def version_raised(old: str, new: str) -> bool:
+    """True when new is a higher x.y.z than old. Anything unreadable is not raised."""
+    a, b = _semver(old), _semver(new)
+    return bool(a and b and b > a)
