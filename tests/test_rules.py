@@ -330,6 +330,23 @@ class MergeGuard(unittest.TestCase):
             with self.subTest(cmd=cmd):
                 self.assertIsNone(self.bash(cmd))
 
+    def test_github_connector_writes_to_main_are_denied(self):
+        for tool in ("mcp__github__push_files", "mcp__github__create_or_update_file",
+                     "mcp__github__delete_file"):
+            for branch in ("main", "master", "refs/heads/main", " main ", "", None):
+                with self.subTest(tool=tool, branch=branch):
+                    inp = {} if branch is None else {"branch": branch}
+                    self.assertEqual(rules.merge_guard_decision(tool, inp, 2, "feature"), "deny")
+            with self.subTest(tool=tool, branch="feature"):
+                self.assertIsNone(rules.merge_guard_decision(tool, {"branch": "feature"}, 2, "x"))
+                self.assertIsNone(rules.merge_guard_decision(tool, {"branch": "main"}, 3, "x"))
+
+    def test_guard_applies_to_bash_merges_and_branch_writes_only(self):
+        for tool in ("Bash", "mcp__github__merge_pull_request", "mcp__github__push_files"):
+            self.assertTrue(rules.merge_guard_applies(tool), tool)
+        for tool in ("Read", "mcp__github__create_pull_request", "mcp__Linear__save_issue"):
+            self.assertFalse(rules.merge_guard_applies(tool), tool)
+
     def test_non_string_command_raises(self):
         with self.assertRaises(TypeError):
             rules.merge_guard_decision("Bash", {"command": ["gh", "pr", "merge"]}, 1, "feature")

@@ -45,10 +45,23 @@ and as a source of templates that `/kickoff` copies into other repos.
 which registers dstack as a plugin marketplace, enables the plugin, and pre-approves the
 Linear and GitHub connector tools (`permissions.allow`). Cloud threads run Claude Code's own
 safety check on each tool call, and it sometimes refused Linear writes the workflow needs
-(seen 2026-11-11); pre-approved tools skip it. dstack's hooks still run first, so the merge
-guard's deny and the approval gate's ask still apply. Cloud threads read these settings only
-in a project with one repository. dstack uses the same file. In cloud sessions
-that alone did not install it (tested 2026-11-11), and plugins added in claude.ai Customize
+(seen 2026-11-11); pre-approved tools skip it. dstack's hooks run before allow rules, so
+the merge guard's deny (merges, and GitHub connector writes to main) and the approval
+gate's ask still apply.
+
+Where those repo permissions load (Claude Code settings docs, checked 2026-11-11):
+
+- **Threads in a claude.ai project:** never, however many repositories the project has.
+  The cloud environment's setup script writes the same allow list into the session's
+  `~/.claude/settings.json` (README, Set up), the file `claude plugin install` also writes.
+- **A cloud session with one repository, outside a project:** yes.
+- **A cloud session with several repositories:** only `enabledPlugins` and
+  `extraKnownMarketplaces`.
+- **Claude Code on a PC:** yes.
+
+dstack uses the same file.
+
+In cloud sessions the repo file did not install the plugin (tested 2026-11-11), and plugins added in claude.ai Customize
 did not sync either. Cloud projects get dstack from a cloud environment whose setup script
 runs `claude plugin marketplace add dsickles/dstack` and `claude plugin install dstack@dstack`.
 
