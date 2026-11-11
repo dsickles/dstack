@@ -1,6 +1,6 @@
 {
   "name": "dstack",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Dan's software factory: /kickoff, session check, message approval gate and merge guard.",
   "author": { "name": "Dan Sickles" },
   "repository": "https://github.com/dsickles/dstack"

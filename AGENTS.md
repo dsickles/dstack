@@ -39,6 +39,8 @@ dstack.
   copy of the PR-title patterns; `tests/test_guard_workflow.py` fails if they drift.
 - `templates/` is copied into other repos by `/kickoff`. Keep placeholders as `<...>`.
 - HOW-I-WORK.md and templates/AGENTS.md stay under 150 lines (`check` enforces it).
+- A PR that changes what the plugin ships (`skills/`, `hooks/`, `lib/`, `templates/`,
+  HOW-I-WORK.md) raises `version` in `.claude-plugin/plugin.json`; CI fails otherwise.
 
 ## How Dan checks the work
 

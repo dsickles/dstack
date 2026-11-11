@@ -17,4 +17,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - run: bash scripts/check.sh
+      - name: Plugin version raised when shipped files change
+        if: github.event_name == 'pull_request'
+        run: python3 scripts/version_check.py "${{ github.event.pull_request.base.sha }}"

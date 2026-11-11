@@ -325,6 +325,28 @@ class MergeGuard(unittest.TestCase):
         with self.assertRaises(TypeError):
             rules.merge_guard_decision("Bash", {"command": ["gh", "pr", "merge"]}, 1, "feature")
 
+class PluginVersion(unittest.TestCase):
+    def test_shipped_changes_need_a_bump(self):
+        for files in [["lib/rules.py"], ["hooks/hooks.json"], ["skills/kickoff/SKILL.md"],
+                      ["HOW-I-WORK.md"], ["templates/AGENTS.md"], ["docs/x.md", "lib/rules.py"]]:
+            with self.subTest(files=files):
+                self.assertTrue(rules.version_bump_needed(files))
+
+    def test_docs_tests_and_ci_need_no_bump(self):
+        for files in [[], ["docs/architecture.md"], ["tests/test_rules.py"],
+                      [".github/workflows/ci.yml"], ["README.md", "AGENTS.md"],
+                      ["libx/a.py"], ["scripts/check.sh"]]:
+            with self.subTest(files=files):
+                self.assertFalse(rules.version_bump_needed(files))
+
+    def test_version_raised(self):
+        self.assertTrue(rules.version_raised("0.1.0", "0.1.1"))
+        self.assertTrue(rules.version_raised("0.1.9", "0.2.0"))
+        self.assertTrue(rules.version_raised("0.9.0", "0.10.0"))
+        self.assertFalse(rules.version_raised("0.1.0", "0.1.0"))
+        self.assertFalse(rules.version_raised("0.2.0", "0.1.9"))
+        self.assertFalse(rules.version_raised("0.1.0", "banana"))
+
 
 if __name__ == "__main__":
     unittest.main()

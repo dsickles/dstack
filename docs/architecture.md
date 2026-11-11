@@ -43,6 +43,12 @@ that alone did not install it (tested 2026-11-11), and plugins added in claude.a
 did not sync either. Cloud projects get dstack from a cloud environment whose setup script
 runs `claude plugin marketplace add dsickles/dstack` and `claude plugin install dstack@dstack`.
 
+A new session's machine installs the latest dstack. A session that was already running
+keeps its copy until `claude plugin marketplace update dstack` and
+`claude plugin update dstack@dstack` run, and that update only happens when the version in
+`.claude-plugin/plugin.json` went up. So CI (`scripts/version_check.py`) fails a PR that
+changes shipped files without raising it.
+
 ## Known limits
 
 - The approval gate matches tool names, so a messaging tool with an unusual verb slips
