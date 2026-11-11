@@ -8,7 +8,7 @@ echo "== unit tests"
 "$py" -m unittest discover -s tests
 
 echo "== JSON files parse"
-for f in hooks/hooks.json .claude-plugin/plugin.json .claude-plugin/marketplace.json templates/claude-settings.json; do
+for f in hooks/hooks.json .claude-plugin/plugin.json .claude-plugin/marketplace.json templates/claude-settings.json .claude/settings.json; do
   "$py" -c "import json,sys; json.load(open(sys.argv[1], encoding='utf-8'))" "$f"
 done
 

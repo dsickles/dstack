@@ -38,6 +38,19 @@ class PreToolUse(unittest.TestCase):
         p = {"tool_name": "Bash", "tool_input": {"command": "gh pr merge 4"}, "cwd": str(self.project)}
         self.assertEqual(run(p, self.project), "deny")
 
+    def test_pre_approved_github_tools_still_hit_the_guard(self):
+        # The settings template pre-approves the whole GitHub server; the hook runs first.
+        (self.project / "AGENTS.md").write_text("**Autonomy level:** 2 Build\n")
+        cases = [("mcp__github__merge_pull_request", {"pullNumber": 4}, "deny"),
+                 ("mcp__github__push_files", {"branch": "main"}, "deny"),
+                 ("mcp__github__delete_file", {}, "deny"),
+                 ("mcp__github__push_files", {"branch": "feature"}, None),
+                 ("mcp__github__create_pull_request", {"base": "main"}, None)]
+        for tool, inp, want in cases:
+            with self.subTest(tool=tool, inp=inp):
+                p = {"tool_name": tool, "tool_input": inp, "cwd": str(self.project)}
+                self.assertEqual(run(p, self.project), want)
+
     def test_merge_allowed_at_level_three(self):
         (self.project / "AGENTS.md").write_text("**Autonomy level:** 3 Automate\n")
         p = {"tool_name": "Bash", "tool_input": {"command": "gh pr merge 4"}, "cwd": str(self.project)}

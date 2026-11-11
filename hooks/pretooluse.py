@@ -60,7 +60,7 @@ def decide(payload):
     tool = payload.get("tool_name", "")
     tool_input = payload.get("tool_input") or {}
 
-    if tool == "Bash" or (tool.startswith("mcp__") and "merge" in tool.rpartition("__")[2].lower()):
+    if rules.merge_guard_applies(tool):
         autonomy, branch, upstream, push_default, remote_push, aliases, mirror = \
             _repo_state(payload.get("cwd"))
         if rules.merge_guard_decision(tool, tool_input, autonomy, branch, upstream, push_default,

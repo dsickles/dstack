@@ -1,6 +1,6 @@
 {
   "name": "dstack",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A software factory for building with AI agents: /kickoff, session check, message approval gate and merge guard.",
   "author": {
     "name": "dsickles"

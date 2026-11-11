@@ -374,6 +374,21 @@ def _walk(command, st, depth=0) -> bool:
     return False
 
 
+# MCP tools that commit straight to a branch (GitHub's connector). Pre-approving the
+# GitHub server skips Claude Code's own check, so the guard must catch these on main.
+BRANCH_WRITE_TOOLS = {"push_files", "create_or_update_file", "delete_file"}
+
+
+def merge_guard_applies(tool_name: str) -> bool:
+    """True for the tool calls merge_guard_decision has an opinion on."""
+    if tool_name == "Bash":
+        return True
+    if not tool_name.startswith("mcp__"):
+        return False
+    tool = tool_name.rpartition("__")[2].lower()
+    return "merge" in tool or tool in BRANCH_WRITE_TOOLS
+
+
 def merge_guard_decision(tool_name, tool_input, autonomy, current_branch,
                          upstream=None, push_default=None, remote_push=(), aliases=None,
                          mirror=False):
@@ -388,7 +403,15 @@ def merge_guard_decision(tool_name, tool_input, autonomy, current_branch,
         return None
     if tool_name.startswith("mcp__"):
         tool = tool_name.rpartition("__")[2].lower()
-        return "deny" if "merge" in tool else None
+        if "merge" in tool:
+            return "deny"
+        if tool in BRANCH_WRITE_TOOLS:
+            # No branch means the repo's default branch, so that is denied too.
+            target = tool_input.get("branch")
+            if not isinstance(target, str) or not target.strip():
+                return "deny"
+            return "deny" if target.strip().removeprefix("refs/heads/") in PROTECTED else None
+        return None
     if tool_name != "Bash":
         return None
     command = tool_input["command"]

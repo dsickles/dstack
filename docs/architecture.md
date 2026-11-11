@@ -42,8 +42,33 @@ and as a source of templates that `/kickoff` copies into other repos.
 ## How a repo gets dstack
 
 `/kickoff` writes the repo's `.claude/settings.json` from `templates/claude-settings.json`,
-which registers dstack as a plugin marketplace and enables the plugin. In cloud sessions
-that alone did not install it (tested 2026-11-11), and plugins added in claude.ai Customize
+which registers dstack as a plugin marketplace, enables the plugin, and pre-approves the
+Linear and GitHub connector tools (`permissions.allow`). Cloud threads run Claude Code's own
+safety check on each tool call, and it sometimes refused Linear writes the workflow needs
+(seen 2026-11-11); pre-approved tools skip it. dstack's hooks run before allow rules, so
+the merge guard's deny (merges, and GitHub connector writes to main) and the approval
+gate's ask still apply.
+
+Where those repo permissions load (Claude Code settings docs, checked 2026-11-11):
+
+- **Threads in a claude.ai project:** never, however many repositories the project has.
+  The cloud environment's setup script writes the same allow list into the session
+  machine's own `~/.claude/settings.json` (README, Set up). **This is observed, not
+  documented:** the settings docs list `~/.claude/settings.json` as not read in a cloud
+  session, meaning the file on your PC. What was seen in project threads on the dstack
+  environment (2026-11-11): the setup script's `claude plugin install` writes dstack's
+  `enabledPlugins` into that file, and nothing else enables dstack there, yet dstack's
+  SessionStart hook runs at session start. And a `permissions.deny` rule added to that file
+  mid-session removed the tool from the session; removing it brought the tool back. If
+  Claude Code stops reading the file, the plugin stops loading too, so it shows at once.
+- **A cloud session with one repository, outside a project:** yes.
+- **A cloud session with several repositories:** only `enabledPlugins` and
+  `extraKnownMarketplaces`.
+- **Claude Code on a PC:** yes.
+
+dstack uses the same file.
+
+In cloud sessions the repo file did not install the plugin (tested 2026-11-11), and plugins added in claude.ai Customize
 did not sync either. Cloud projects get dstack from a cloud environment whose setup script
 runs `claude plugin marketplace add dsickles/dstack` and `claude plugin install dstack@dstack`.
 
